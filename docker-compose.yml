@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: redditclone
+    ports:
+      - "5432:5432" # port for tablePlus and GO
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend-net
+
+  mongodb:
+    image: mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD}
+      MONGO_LOG_LEVEL: error
+    command: mongod
+    ports:
+      - "27017:27017" # port for tablePlus and GO
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - backend-net
+  
+  redis:
+    image: redis:alpine
+    environment:
+      - REDIS_PASSWORD=${DB_PASSWORD}
+      - REDIS_USER_PASSWORD=${DB_PASSWORD}
+      - REDIS_DATABASE=0
+    volumes:
+      - redis_data:/data
+    command: >
+      sh -c '
+        mkdir -p /usr/local/etc/redis &&
+        echo "bind 0.0.0.0" > /usr/local/etc/redis/redis.conf &&
+        echo "requirepass $DB_PASSWORD" >> /usr/local/etc/redis/redis.conf &&
+        echo "appendonly yes" >> /usr/local/etc/redis/redis.conf &&
+        echo "appendfsync everysec" >> /usr/local/etc/redis/redis.conf &&
+        echo "user default on nopass ~* +@all" > /usr/local/etc/redis/users.acl &&
+        echo "user $REDIS_USER on >$DB_PASSWORD ~* +@all" >> /usr/local/etc/redis/users.acl &&
+        redis-server /usr/local/etc/redis/redis.conf --aclfile /usr/local/etc/redis/users.acl
+      '
+    ports:
+      - "6379:6379" 
+    networks:
+      - backend-net
+  
+  redditclone:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mongodb
+      - postgres
+      - redis
+    networks:
+      - backend-net
+
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ./db/postgres_data
+  mongo_data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ./db/mongo_data
+  redis_data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ./db/redis_data
+
+networks:
+  backend-net:
+    driver: bridge

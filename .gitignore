@@ -1,0 +1,3 @@
+db/mongo_data/*
+db/postgres_data/*
+db/redis_data/*
